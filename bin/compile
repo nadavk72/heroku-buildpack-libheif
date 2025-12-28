@@ -117,6 +117,48 @@ else
   exit 1
 fi
 
+# Ensure files are included in slug
+# Create marker files to ensure the directory is tracked
+echo "-----> Ensuring libheif files are included in slug..."
+touch "${INSTALL_PREFIX}/.heroku-keep" 2>&1 | indent || true
+touch "${INSTALL_PREFIX}/lib/.heroku-keep" 2>&1 | indent || true
+touch "${INSTALL_PREFIX}/include/.heroku-keep" 2>&1 | indent || true
+touch "${INSTALL_PREFIX}/bin/.heroku-keep" 2>&1 | indent || true
+
+# Verify the directory structure and file count
+echo "       Verifying installation directory structure..."
+if [ -d "${INSTALL_PREFIX}" ]; then
+  echo "       Directory exists: ${INSTALL_PREFIX}"
+  echo "       Files in lib directory:"
+  ls -la "${INSTALL_PREFIX}/lib/" 2>&1 | indent || true
+  echo "       Total files installed:"
+  find "${INSTALL_PREFIX}" -type f | wc -l | indent || true
+else
+  echo "       ERROR: Installation directory not found: ${INSTALL_PREFIX}"
+  exit 1
+fi
+
+# Explicitly verify critical files exist
+echo "       Verifying critical files..."
+CRITICAL_FILES=(
+  "${INSTALL_PREFIX}/lib/libheif.so"
+  "${INSTALL_PREFIX}/lib/libheif.so.1"
+  "${INSTALL_PREFIX}/include/libheif/heif.h"
+)
+
+for file in "${CRITICAL_FILES[@]}"; do
+  if [ -f "$file" ]; then
+    echo "       ✓ Found: $file"
+  else
+    echo "       ✗ Missing: $file"
+    # Don't fail on missing .so.1 (might be a symlink) or header
+    if [[ "$file" == *"libheif.so" ]] && [[ "$file" != *".so.1" ]]; then
+      echo "       ERROR: Critical file missing: $file"
+      exit 1
+    fi
+  fi
+done
+
 # Clean up build files
 echo "-----> Cleaning up..."
 cd /
