@@ -78,10 +78,10 @@ export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:/app/vendor/libheif/lib/pkgconfig"
 export LIBHEIF_DIR="/app/vendor/libheif"
 EOF
 
-# Update library cache
-echo "-----> Updating library cache..."
-echo "${INSTALL_PREFIX}/lib" > /etc/ld.so.conf.d/libheif.conf
-ldconfig 2>&1 | indent
+# Update library cache (skip - we use LD_LIBRARY_PATH instead)
+# Note: Cannot write to /etc/ld.so.conf.d/ on Heroku (requires root)
+# LD_LIBRARY_PATH is set in .profile.d/libheif.sh and is sufficient
+echo "-----> Library paths will be set via LD_LIBRARY_PATH environment variable"
 
 # Verify installation
 echo "-----> Verifying installation..."
