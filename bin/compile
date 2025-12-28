@@ -4,11 +4,25 @@
 
 set -e
 
+# Ensure BUILD_DIR is set (Heroku sets this, but let's be safe)
+BUILD_DIR="${BUILD_DIR:-/app}"
+
+# Verify BUILD_DIR exists
+if [ ! -d "$BUILD_DIR" ]; then
+  echo "       ERROR: BUILD_DIR does not exist: $BUILD_DIR"
+  exit 1
+fi
+
 # Configuration
 LIBHEIF_VERSION="1.18.2"
-# Install to /app/vendor/libheif (will be available at runtime)
+# Install to BUILD_DIR/vendor/libheif (will be available at runtime as /app/vendor/libheif)
 INSTALL_PREFIX="${BUILD_DIR}/vendor/libheif"
 BUILD_DIR_TEMP=$(mktemp -d)
+
+# Ensure INSTALL_PREFIX is absolute
+if [[ ! "$INSTALL_PREFIX" = /* ]]; then
+  INSTALL_PREFIX="${BUILD_DIR}/${INSTALL_PREFIX}"
+fi
 
 # Colors for output
 indent() {
@@ -16,6 +30,12 @@ indent() {
 }
 
 echo "-----> Installing libheif ${LIBHEIF_VERSION} from source..."
+echo "       BUILD_DIR: $BUILD_DIR"
+echo "       INSTALL_PREFIX: $INSTALL_PREFIX"
+
+# Create install directory structure
+echo "-----> Creating install directory..."
+mkdir -p "${INSTALL_PREFIX}/lib" "${INSTALL_PREFIX}/include" "${INSTALL_PREFIX}/bin" 2>&1 | indent
 
 # Install build dependencies
 echo "-----> Installing build dependencies..."
@@ -51,7 +71,7 @@ mkdir build && cd build
 cmake .. \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}" \
-  -DCMAKE_INSTALL_LIBDIR="${INSTALL_PREFIX}/lib" \
+  -DCMAKE_INSTALL_LIBDIR="lib" \
   -DBUILD_SHARED_LIBS=ON \
   -DWITH_DAV1D=ON \
   -DWITH_AOM=ON \
@@ -65,10 +85,6 @@ make -j$(nproc) 2>&1 | indent
 echo "-----> Installing libheif..."
 make install 2>&1 | indent
 
-echo "-----> Installing libheif..."
-make install 2>&1 | indent
-
-# ===== ADD THIS CODE HERE =====
 # Export environment variables for subsequent buildpacks
 # This allows the vips buildpack to find libheif during compilation
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:${INSTALL_PREFIX}/lib"
@@ -76,15 +92,9 @@ export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:${INSTALL_PREFIX}/lib/pkgconfig"
 export LIBHEIF_DIR="${INSTALL_PREFIX}"
 
 echo "       Exported PKG_CONFIG_PATH and LD_LIBRARY_PATH for vips buildpack"
-# ===== END OF ADDED CODE =====
 
 # Set up environment variables for runtime
 echo "-----> Setting up environment variables..."
-
-# BUILD_DIR is set by Heroku, but ensure it's not empty
-if [ -z "$BUILD_DIR" ]; then
-  BUILD_DIR="/app"
-fi
 mkdir -p "${BUILD_DIR}/.profile.d" 2>&1 | indent
 cat > "${BUILD_DIR}/.profile.d/libheif.sh" <<'EOF'
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/app/vendor/libheif/lib"
