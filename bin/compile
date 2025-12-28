@@ -67,7 +67,11 @@ make install 2>&1 | indent
 
 # Set up environment variables for runtime
 echo "-----> Setting up environment variables..."
-mkdir -p "${BUILD_DIR}/.profile.d"
+# BUILD_DIR is set by Heroku, but ensure it's not empty
+if [ -z "$BUILD_DIR" ]; then
+  BUILD_DIR="/app"
+fi
+mkdir -p "${BUILD_DIR}/.profile.d" 2>&1 | indent
 cat > "${BUILD_DIR}/.profile.d/libheif.sh" <<'EOF'
 export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/app/vendor/libheif/lib"
 export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:/app/vendor/libheif/lib/pkgconfig"
