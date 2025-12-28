@@ -65,8 +65,22 @@ make -j$(nproc) 2>&1 | indent
 echo "-----> Installing libheif..."
 make install 2>&1 | indent
 
+echo "-----> Installing libheif..."
+make install 2>&1 | indent
+
+# ===== ADD THIS CODE HERE =====
+# Export environment variables for subsequent buildpacks
+# This allows the vips buildpack to find libheif during compilation
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/app/vendor/libheif/lib"
+export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:/app/vendor/libheif/lib/pkgconfig"
+export LIBHEIF_DIR="/app/vendor/libheif"
+
+echo "       Exported PKG_CONFIG_PATH and LD_LIBRARY_PATH for vips buildpack"
+# ===== END OF ADDED CODE =====
+
 # Set up environment variables for runtime
 echo "-----> Setting up environment variables..."
+
 # BUILD_DIR is set by Heroku, but ensure it's not empty
 if [ -z "$BUILD_DIR" ]; then
   BUILD_DIR="/app"
