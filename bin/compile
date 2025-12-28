@@ -1,0 +1,103 @@
+#!/bin/bash
+# Heroku buildpack to compile and install libheif 1.18.0+ from source
+# This is needed because Ubuntu repositories only provide libheif 1.17.6
+
+set -e
+
+# Configuration
+LIBHEIF_VERSION="1.18.2"
+# Install to /app/vendor/libheif (will be available at runtime)
+INSTALL_PREFIX="/app/vendor/libheif"
+BUILD_DIR_TEMP=$(mktemp -d)
+
+# Colors for output
+indent() {
+  sed 's/^/       /'
+}
+
+echo "-----> Installing libheif ${LIBHEIF_VERSION} from source..."
+
+# Install build dependencies
+echo "-----> Installing build dependencies..."
+apt-get update -qq | indent
+apt-get install -y --no-install-recommends \
+  build-essential \
+  cmake \
+  pkg-config \
+  wget \
+  tar \
+  libde265-dev \
+  libx265-dev \
+  libaom-dev \
+  libdav1d-dev \
+  libyuv-dev \
+  libjpeg-dev \
+  libpng-dev \
+  2>&1 | indent
+
+# Download libheif source
+echo "-----> Downloading libheif ${LIBHEIF_VERSION} source..."
+cd "$BUILD_DIR_TEMP"
+wget -q "https://github.com/strukturag/libheif/releases/download/v${LIBHEIF_VERSION}/libheif-${LIBHEIF_VERSION}.tar.gz" 2>&1 | indent
+
+# Extract source
+echo "-----> Extracting source..."
+tar -xzf "libheif-${LIBHEIF_VERSION}.tar.gz" 2>&1 | indent
+cd "libheif-${LIBHEIF_VERSION}"
+
+# Configure and build
+echo "-----> Configuring libheif..."
+mkdir build && cd build
+cmake .. \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_INSTALL_PREFIX="${INSTALL_PREFIX}" \
+  -DCMAKE_INSTALL_LIBDIR="${INSTALL_PREFIX}/lib" \
+  -DBUILD_SHARED_LIBS=ON \
+  -DWITH_DAV1D=ON \
+  -DWITH_AOM=ON \
+  -DWITH_X265=ON \
+  -DWITH_LIBDE265=ON \
+  2>&1 | indent
+
+echo "-----> Compiling libheif (this may take a few minutes)..."
+make -j$(nproc) 2>&1 | indent
+
+echo "-----> Installing libheif..."
+make install 2>&1 | indent
+
+# Set up environment variables for runtime
+echo "-----> Setting up environment variables..."
+mkdir -p "${BUILD_DIR}/.profile.d"
+cat > "${BUILD_DIR}/.profile.d/libheif.sh" <<'EOF'
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}:/app/vendor/libheif/lib"
+export PKG_CONFIG_PATH="${PKG_CONFIG_PATH}:/app/vendor/libheif/lib/pkgconfig"
+export LIBHEIF_DIR="/app/vendor/libheif"
+EOF
+
+# Update library cache
+echo "-----> Updating library cache..."
+echo "${INSTALL_PREFIX}/lib" > /etc/ld.so.conf.d/libheif.conf
+ldconfig 2>&1 | indent
+
+# Verify installation
+echo "-----> Verifying installation..."
+if [ -f "${INSTALL_PREFIX}/lib/libheif.so" ]; then
+  echo "       libheif installed successfully to ${INSTALL_PREFIX}"
+  "${INSTALL_PREFIX}/bin/heif-info" --version 2>&1 | indent || echo "       (heif-info not available, but library installed)"
+else
+  echo "       ERROR: libheif library not found after installation"
+  exit 1
+fi
+
+# Clean up build files
+echo "-----> Cleaning up..."
+cd /
+rm -rf "$BUILD_DIR_TEMP"
+
+# Remove build dependencies to reduce slug size
+echo "-----> Removing build dependencies..."
+apt-get purge -y build-essential cmake pkg-config wget 2>&1 | indent || true
+apt-get autoremove -y 2>&1 | indent || true
+
+echo "-----> libheif ${LIBHEIF_VERSION} installation complete!"
+

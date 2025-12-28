@@ -1,0 +1,5 @@
+#!/bin/bash
+# This buildpack always runs to ensure libheif 1.18.0+ is available
+echo "libheif"
+exit 0
+
